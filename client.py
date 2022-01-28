@@ -22,24 +22,34 @@ def get_msg():
     msg = client.recv(length).decode(FORMAT)
     if msg == 'disconnected':
       print('Disconnected from the server.')
-      client.close()
-    elif msg =='name_error':
-      global invalid_name
-      invalid_name = True
-      print('Name is invalid or in use.')
-      print('Please try connecting again.')
-      client.close()
-    elif msg == 'name':
-      print(
-      '''
-      [Client]: Connected to the server
-      -> Please enter client name
-      -> To change your name, please type "name: {selected_name}
-      -> To quit, please send a blank line
-      ''')
+      client.close()    
     else:
       print(msg)
   
+def set_name():
+  get_msg()
+  while True:
+    response = client.recv(BUFFER).decode(FORMAT)
+    if response:
+      length = int(response)
+      msg = client.recv(length).decode(FORMAT)
+      if msg == 'name':
+        name = input('[Client]: Please enter your name: ')
+        client.send(get_len(name))
+        client.send(name.encode(FORMAT))
+      elif msg =='name_error':
+        global invalid_name
+        invalid_name = True
+        print('[Client]: Name is invalid or already in use.')
+      elif msg =='name_validated':
+        print('[Client]: Connection estabilished successfully')
+        send_th = threading.Thread(target=write)
+        receive_th = threading.Thread(target=receive)
+        receive_th.start()
+        send_th.start()
+        break       
+      else:
+        print(msg)
 
 def write():
   while True:
@@ -68,10 +78,7 @@ def receive():
 def start():
   try:
     client.connect(ADDR)
-    send_th = threading.Thread(target=write)
-    receive_th = threading.Thread(target=receive)
-    receive_th.start()
-    send_th.start()
+    set_name()
   except:
     print('Connection cannot be estabilished.')
 

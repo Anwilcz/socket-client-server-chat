@@ -18,22 +18,29 @@ def get_len(message):
 
 # Broast message to all clients
 def broadcast(message, index):
-  msg = message
-  length = get_len(msg)
-  for connection in connections:
-    if connections.index(connection) == index:
-      continue 
-    connection.send(length)
-    connection.send(msg.encode(FORMAT)) 
+  recipent = re.findall('^\[.+\]:\s@(.+):\s', message)
+  if len(recipent):
+    recipent = recipent[0]
+    sender = re.findall('^\[(.+)\]', message)[0]
+    message = re.findall('@.+?:\s(.+)', message)[0]
+    msg = f'[From: {sender}]: {message}'
+    connections[names.index(recipent)].send(get_len(msg))
+    connections[names.index(recipent)].send(msg.encode(FORMAT))
+  else:
+    msg = message
+    length = get_len(msg)
+    for connection in connections:
+      if connections.index(connection) == index:
+        continue 
+      connection.send(length)
+      connection.send(msg.encode(FORMAT)) 
 
 
 def client(connection, address):
-
   # Print new connection estabilished
   print(f'New connection: {hide(address)}')
   set_name(connection)
   if connection in connections:
-
     while True:
       try:
         msg_len = connection.recv(BUFFER).decode(FORMAT)
@@ -42,12 +49,10 @@ def client(connection, address):
           msg_len = int(msg_len)
           msg = connection.recv(msg_len).decode(FORMAT)
           name = re.findall('^name: (.+)', msg)
-          print('name ->', name)
           if msg == DISCONNECT:
             broadcast(f'[Server]: {names[index]} has disconnected.', index)
             connections.pop(index)
             names.pop(index)
-            print('message sent')
             msg = 'disconnected'
             connection.send(get_len(msg))
             connection.send(msg.encode(FORMAT))
@@ -56,8 +61,13 @@ def client(connection, address):
             break    
           elif name:
             name = name[0]
-            broadcast(f'[Server]: {names[index]} is now {name}.', index)
-            names[index] = name
+            if name in names or not name:
+              msg = '[Server]: Name is invalid or already in use'
+              connection.send(get_len(msg))
+              connection.send(msg.encode(FORMAT))
+            else:
+              broadcast(f'[Server]: {names[index]} is now {name}.', index)
+              names[index] = name
           else:
             broadcast(f'[{names[index]}]: {msg}', index)
 
@@ -80,19 +90,32 @@ def client(connection, address):
 
 # Ask new client to set client name and adding new client to the list
 def set_name(connection):
-  msg = 'name'
-  connection.send(get_len(msg))
-  connection.send(msg.encode(FORMAT))
-  name_len = connection.recv(BUFFER).decode(FORMAT)
   try:
-    name_len = int(name_len)
-    name = connection.recv(name_len).decode(FORMAT)
-    if name in names or not name:
-      msg = 'name_error'
+    msg = f'''
+{msg_formatter('Welcome to the chatroom')}
+->  Choose your name.
+->  Enter 'name: selected_name' to change your name.
+->  Enter '@recipent_name: message' to send a private message.
+->  Enter 'q' to disconnect.
+    '''
+    connection.send(get_len(msg))
+    connection.send(msg.encode(FORMAT))
+    while True:
+      msg = 'name'
       connection.send(get_len(msg))
       connection.send(msg.encode(FORMAT))
-      connection.close()
-      return
+      name_len = connection.recv(BUFFER).decode(FORMAT)
+      name_len = int(name_len)
+      name = connection.recv(name_len).decode(FORMAT)
+      if name in names or not name:
+        msg = 'name_error'
+        connection.send(get_len(msg))
+        connection.send(msg.encode(FORMAT))
+      else:
+        break
+    msg = 'name_validated'
+    connection.send(get_len(msg))
+    connection.send(msg.encode(FORMAT))
     # Append new connection to the register
     connections.append(connection)
     names.append(name)
