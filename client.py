@@ -1,22 +1,79 @@
+
+from os import abort
 import socket
 from config import BUFFER, ADDR, FORMAT, DISCONNECT
+import threading
+
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(ADDR)
+invalid_name = False
 
-def send(message):
-  msg = message.encode(FORMAT)
-  msg_len = len(msg)
-  msg_len = str(msg_len).encode(FORMAT)
-  msg_len += b' ' * (BUFFER - len(msg_len))
-  client.send(msg_len)
-  client.send(msg)
+
+def get_len(message):
+  length = len(message)
+  length = str(length).encode(FORMAT)
+  length += b' ' * (BUFFER - len(length))
+  return length
+
+def get_msg():
   response = client.recv(BUFFER).decode(FORMAT)
-  print(f'Server response: {response}')
+  if response:
+    length = int(response)
+    msg = client.recv(length).decode(FORMAT)
+    if msg == 'disconnected':
+      print('Disconnected from the server.')
+      client.close()
+    elif msg =='name_error':
+      global invalid_name
+      invalid_name = True
+      print('Name is invalid or in use.')
+      print('Please try connecting again.')
+      client.close()
+    elif msg == 'name':
+      print(
+      '''
+      [Client]: Connected to the server
+      -> Please enter client name
+      -> To change your name, please type "name: {selected_name}
+      -> To quit, please send a blank line
+      ''')
+    else:
+      print(msg)
+  
 
+def write():
+  while True:
+    try: 
+      msg = input()
+      client.send(get_len(msg))
+      client.send(msg.encode(FORMAT))
+      if msg == DISCONNECT:
+        break
+    except:
+      if invalid_name:
+        print('Disconnected from the server.')
+      else:
+        print('Server does not respond..')
+      client.close() 
+      break
+      
+def receive():
+  while True:
+    try:
+      get_msg()
+    except:
+      client.close()
+      break
 
-while True:
-  msg = input('Enter your message: ')
-  send(msg)
-  if msg == DISCONNECT:
-    break
+def start():
+  try:
+    client.connect(ADDR)
+    send_th = threading.Thread(target=write)
+    receive_th = threading.Thread(target=receive)
+    receive_th.start()
+    send_th.start()
+  except:
+    print('Connection cannot be estabilished.')
+
+    
+start()
